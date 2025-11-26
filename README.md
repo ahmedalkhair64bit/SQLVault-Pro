@@ -1,5 +1,6 @@
 # SQL Inventory Hub
-
+https://i.imgur.com/bXO3GVs.png
+https://i.imgur.com/xtJCk6L.png
 **A modern web application for Database Administrators to centrally manage, monitor, and document SQL Server infrastructure.**
 
 ---
