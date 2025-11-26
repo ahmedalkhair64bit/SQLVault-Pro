@@ -458,19 +458,17 @@ Run the SQL permission script provided in the "SQL Server Permissions" section.
 
 ### Dashboard - Instances View
 View all SQL Server instances with status indicators, environment badges, and database counts.
+![alt text](https://i.imgur.com/bXO3GVs.png)
 
 ### Dashboard - Databases View
 Browse all databases across instances with backup status and size information.
-
+![alt text](https://i.imgur.com/RLtNXYE.png)
 ### Instance Detail
 Detailed view of a single instance with databases, logins, and backup history tabs.
-
-### Database Detail
-Complete database information including tables, indexes, stored procedures, and users.
-
+![alt text](https://i.imgur.com/fNRj3kf.png)
 ### Export Options
 Select specific data to export as CSV files.
-
+![alt text](https://i.imgur.com/BtBDYtX.png)
 ---
 
 ## Developer Guide
@@ -966,9 +964,7 @@ The app uses a dark theme defined in `src/index.css`. Key CSS variables:
 
 ---
 
-## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
