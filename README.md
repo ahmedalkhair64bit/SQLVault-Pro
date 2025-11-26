@@ -463,6 +463,481 @@ Select specific data to export as CSV files.
 
 ---
 
+## Developer Guide
+
+This section is for developers and AI coding agents who want to extend or customize the application.
+
+### Architecture Overview
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   React App     │────▶│  Express API    │────▶│  SQLite DB      │
+│   (Frontend)    │     │  (Backend)      │     │  (App Data)     │
+└─────────────────┘     └────────┬────────┘     └─────────────────┘
+                                 │
+                                 ▼
+                        ┌─────────────────┐
+                        │  SQL Servers    │
+                        │  (Monitored)    │
+                        └─────────────────┘
+```
+
+### Backend Architecture
+
+#### Entry Point
+- **`src/index.js`**: Express server setup, middleware configuration, route mounting
+
+#### Routes Pattern
+All routes follow RESTful conventions in `src/routes/`:
+
+```javascript
+// Example route structure
+const express = require('express');
+const router = express.Router();
+const { authenticateToken, requireAdmin } = require('../middleware/auth');
+
+// Public route (if any)
+router.get('/public', (req, res) => { });
+
+// Authenticated route
+router.get('/', authenticateToken, (req, res) => { });
+
+// Admin-only route
+router.post('/', authenticateToken, requireAdmin, (req, res) => { });
+
+module.exports = router;
+```
+
+#### Database Access Pattern
+Uses `better-sqlite3` for synchronous SQLite operations:
+
+```javascript
+const db = require('../models/db');
+
+// SELECT query
+const rows = db.prepare('SELECT * FROM table WHERE id = ?').all(id);
+
+// INSERT query
+const result = db.prepare('INSERT INTO table (col) VALUES (?)').run(value);
+const newId = result.lastInsertRowid;
+
+// UPDATE query
+db.prepare('UPDATE table SET col = ? WHERE id = ?').run(value, id);
+
+// Transaction
+const transaction = db.transaction(() => {
+    db.prepare('INSERT ...').run();
+    db.prepare('UPDATE ...').run();
+});
+transaction();
+```
+
+#### Adding a New API Endpoint
+
+1. **Create or edit route file** in `src/routes/`:
+```javascript
+// src/routes/newfeature.js
+const express = require('express');
+const router = express.Router();
+const { authenticateToken } = require('../middleware/auth');
+const db = require('../models/db');
+
+router.get('/', authenticateToken, (req, res) => {
+    try {
+        const data = db.prepare('SELECT * FROM table').all();
+        res.json(data);
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+module.exports = router;
+```
+
+2. **Mount the route** in `src/index.js`:
+```javascript
+const newfeatureRoutes = require('./routes/newfeature');
+app.use('/api/newfeature', newfeatureRoutes);
+```
+
+#### SQL Server Collector Service
+The `src/services/sqlServerCollector.js` handles all SQL Server connectivity:
+
+```javascript
+const { collectInstanceMetadata } = require('../services/sqlServerCollector');
+
+// Collect metadata from a SQL Server instance
+const metadata = await collectInstanceMetadata({
+    host: 'server.domain.com',
+    port: 1433,
+    username: 'reader',
+    password: 'decrypted_password',
+    encrypt: false,
+    trustServerCertificate: true
+});
+```
+
+**Key functions:**
+- `collectInstanceMetadata(config)`: Full instance scan (databases, logins, etc.)
+- `collectDatabaseObjects(config, dbName)`: Tables, indexes, procedures for one DB
+- `testConnection(config)`: Verify connectivity
+
+### Frontend Architecture
+
+#### State Management
+Uses React Context for authentication state:
+
+```javascript
+// Access auth context in any component
+import { useAuth } from '../context/AuthContext';
+
+function MyComponent() {
+    const { user, token, logout } = useAuth();
+    // user.role is 'admin' or 'dba'
+}
+```
+
+#### API Client
+Centralized API calls via `src/services/api.js`:
+
+```javascript
+import api from '../services/api';
+
+// GET request
+const response = await api.get('/instances');
+
+// POST request
+const response = await api.post('/instances', { name: 'Server1' });
+
+// The api client automatically:
+// - Adds Authorization header with JWT token
+// - Sets base URL to /api
+// - Handles token from localStorage
+```
+
+#### Adding a New Page
+
+1. **Create page component** in `src/pages/`:
+```javascript
+// src/pages/NewPage.js
+import React, { useState, useEffect } from 'react';
+import api from '../services/api';
+
+function NewPage() {
+    const [data, setData] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const fetchData = async () => {
+        try {
+            const response = await api.get('/newfeature');
+            setData(response.data);
+        } catch (error) {
+            console.error('Error fetching data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (loading) return <div className="loading">Loading...</div>;
+
+    return (
+        <div className="page-container">
+            <h1>New Feature</h1>
+            {/* Your content */}
+        </div>
+    );
+}
+
+export default NewPage;
+```
+
+2. **Add route** in `src/App.js`:
+```javascript
+import NewPage from './pages/NewPage';
+
+// Inside Routes component
+<Route path="/newfeature" element={<NewPage />} />
+```
+
+3. **Add sidebar link** in `src/components/Layout.js`:
+```javascript
+<NavLink to="/newfeature" className={({isActive}) => isActive ? 'active' : ''}>
+    New Feature
+</NavLink>
+```
+
+### Database Schema
+
+#### Core Tables
+
+```sql
+-- Users table
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT CHECK(role IN ('admin', 'dba')) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- SQL Server instances
+CREATE TABLE sql_instances (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    instance_name TEXT NOT NULL,
+    environment TEXT,
+    host TEXT NOT NULL,
+    port INTEGER DEFAULT 1433,
+    username TEXT,
+    password_encrypted TEXT,
+    is_active INTEGER DEFAULT 1,
+    disabled_reason TEXT,
+    disabled_type TEXT CHECK (disabled_type IN ('permanent', 'temporary')),
+    disabled_at DATETIME,
+    -- ... more fields
+);
+
+-- Databases
+CREATE TABLE databases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    instance_id INTEGER REFERENCES sql_instances(id),
+    database_name TEXT NOT NULL,
+    -- ... more fields
+);
+
+-- Applications
+CREATE TABLE applications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    description TEXT
+);
+
+-- Junction tables for many-to-many relationships
+CREATE TABLE instance_applications (
+    instance_id INTEGER REFERENCES sql_instances(id),
+    application_id INTEGER REFERENCES applications(id),
+    PRIMARY KEY (instance_id, application_id)
+);
+
+CREATE TABLE database_applications (
+    database_id INTEGER REFERENCES databases(id),
+    application_id INTEGER REFERENCES applications(id),
+    PRIMARY KEY (database_id, application_id)
+);
+```
+
+#### Adding a New Migration
+
+1. **Create migration file** in `src/migrations/`:
+```javascript
+// src/migrations/002_new_feature.js
+module.exports = {
+    up: (db) => {
+        db.exec(`
+            ALTER TABLE sql_instances ADD COLUMN new_field TEXT;
+
+            CREATE TABLE new_table (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL
+            );
+        `);
+    },
+    down: (db) => {
+        // Rollback logic (optional)
+    }
+};
+```
+
+2. **Update migration runner** in `src/migrations/run.js` to include new migration.
+
+### Encryption & Security
+
+#### Password Encryption for SQL Credentials
+```javascript
+const crypto = require('crypto');
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY; // 32 chars
+const IV_LENGTH = 16;
+
+function encrypt(text) {
+    const iv = crypto.randomBytes(IV_LENGTH);
+    const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
+    let encrypted = cipher.update(text);
+    encrypted = Buffer.concat([encrypted, cipher.final()]);
+    return iv.toString('hex') + ':' + encrypted.toString('hex');
+}
+
+function decrypt(text) {
+    const [ivHex, encryptedHex] = text.split(':');
+    const iv = Buffer.from(ivHex, 'hex');
+    const encrypted = Buffer.from(encryptedHex, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
+    let decrypted = decipher.update(encrypted);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    return decrypted.toString();
+}
+```
+
+#### JWT Authentication
+```javascript
+const jwt = require('jsonwebtoken');
+
+// Generate token
+const token = jwt.sign(
+    { id: user.id, username: user.username, role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: '24h' }
+);
+
+// Verify token (in middleware)
+const decoded = jwt.verify(token, process.env.JWT_SECRET);
+```
+
+### Common Patterns
+
+#### Input Validation with express-validator
+```javascript
+const { body, param, validationResult } = require('express-validator');
+
+router.post('/',
+    authenticateToken,
+    [
+        body('name').trim().notEmpty().withMessage('Name is required'),
+        body('email').isEmail().withMessage('Valid email required'),
+        body('count').optional().isInt({ min: 0 })
+    ],
+    (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+        // Process valid request
+    }
+);
+```
+
+#### Pagination Pattern
+```javascript
+router.get('/items', authenticateToken, (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+
+    const items = db.prepare(`
+        SELECT * FROM items
+        LIMIT ? OFFSET ?
+    `).all(limit, offset);
+
+    const total = db.prepare('SELECT COUNT(*) as count FROM items').get().count;
+
+    res.json({
+        data: items,
+        pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit)
+        }
+    });
+});
+```
+
+#### CSV Export Pattern
+```javascript
+router.get('/export', authenticateToken, (req, res) => {
+    const data = db.prepare('SELECT * FROM table').all();
+
+    const headers = ['Column1', 'Column2', 'Column3'];
+    const rows = data.map(row => [
+        row.column1,
+        row.column2,
+        row.column3
+    ]);
+
+    let csv = headers.join(',') + '\n';
+    rows.forEach(row => {
+        csv += row.map(val => `"${(val || '').toString().replace(/"/g, '""')}"`).join(',') + '\n';
+    });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="export.csv"');
+    res.send(csv);
+});
+```
+
+### Testing Locally
+
+```bash
+# Backend only (with auto-reload)
+cd backend
+npm run dev
+
+# Frontend only (with hot-reload)
+cd frontend
+npm start
+
+# Reset database
+cd backend
+rm data/inventory.db
+npm run migrate
+npm run seed
+```
+
+### Environment Variables Reference
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| PORT | No | Backend port (default: 3001) |
+| NODE_ENV | No | development or production |
+| JWT_SECRET | Yes | Secret for JWT signing |
+| ENCRYPTION_KEY | Yes | 32-char key for AES encryption |
+| DB_PATH | No | SQLite database path |
+| ADMIN_USERNAME | No | Default admin username for seeding |
+| ADMIN_PASSWORD | No | Default admin password for seeding |
+| MSSQL_ENCRYPT | No | Encrypt SQL connections (default: false) |
+| MSSQL_TRUST_SERVER_CERTIFICATE | No | Trust self-signed certs (default: true) |
+
+### Extending the SQL Collector
+
+To collect additional SQL Server metadata, edit `src/services/sqlServerCollector.js`:
+
+```javascript
+// Add new query in collectInstanceMetadata function
+const newData = await pool.request().query(`
+    SELECT column1, column2
+    FROM sys.some_view
+`);
+
+// Return in metadata object
+return {
+    ...existingData,
+    newData: newData.recordset
+};
+```
+
+### Frontend Styling
+
+The app uses a dark theme defined in `src/index.css`. Key CSS variables:
+
+```css
+:root {
+    --bg-primary: #1a1a2e;
+    --bg-secondary: #16213e;
+    --bg-card: #1f2940;
+    --text-primary: #eee;
+    --text-secondary: #aaa;
+    --accent: #4f8cff;
+    --success: #27ae60;
+    --warning: #f39c12;
+    --danger: #e74c3c;
+}
+```
+
+---
+
 ## Contributing
 
 1. Fork the repository
@@ -470,6 +945,14 @@ Select specific data to export as CSV files.
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+### Contribution Guidelines
+
+- Follow existing code patterns and naming conventions
+- Add input validation for all new endpoints
+- Update this README if adding new features
+- Test with both admin and DBA roles
+- Ensure no sensitive data is logged or exposed
 
 ---
 

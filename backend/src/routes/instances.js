@@ -60,11 +60,29 @@ router.get('/', authenticateToken, [
     try {
         const instances = db.prepare(sql).all(...params);
 
-        // Get application_ids for each instance
-        const getAppIds = db.prepare('SELECT application_id FROM instance_applications WHERE instance_id = ?');
-        for (const instance of instances) {
-            const appRows = getAppIds.all(instance.id);
-            instance.application_ids = appRows.map(r => r.application_id);
+        // Get all application mappings in a single query (optimized for 100+ instances)
+        if (instances.length > 0) {
+            const instanceIds = instances.map(i => i.id);
+            const placeholders = instanceIds.map(() => '?').join(',');
+            const appMappings = db.prepare(`
+                SELECT instance_id, application_id
+                FROM instance_applications
+                WHERE instance_id IN (${placeholders})
+            `).all(...instanceIds);
+
+            // Build a map for quick lookup
+            const appMap = {};
+            for (const mapping of appMappings) {
+                if (!appMap[mapping.instance_id]) {
+                    appMap[mapping.instance_id] = [];
+                }
+                appMap[mapping.instance_id].push(mapping.application_id);
+            }
+
+            // Assign to instances
+            for (const instance of instances) {
+                instance.application_ids = appMap[instance.id] || [];
+            }
         }
 
         res.json(instances);
