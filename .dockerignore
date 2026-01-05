@@ -56,6 +56,9 @@ docker-compose*.yml
 *.db-shm
 backend/data
 
+# Desktop app (Electron)
+desktop
+
 # Misc
 .npm
 .eslintcache

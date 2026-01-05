@@ -295,6 +295,60 @@ For production deployments:
 
 ---
 
+## Windows Desktop Application
+
+SQLVault Pro can also be installed as a native Windows desktop application with a standard installer.
+
+### Download & Install
+
+1. Download `SQLVault-Pro-Setup-1.0.0.exe` from the [Releases](https://github.com/yourusername/sqlvault-pro/releases) page
+2. Run the installer
+3. Follow the installation wizard
+4. Launch SQLVault Pro from the Start Menu or Desktop shortcut
+
+### Features
+
+- **Native Windows App**: Runs as a standalone desktop application
+- **No Server Required**: Backend runs locally within the app
+- **Persistent Data**: Database stored in `%APPDATA%\sqlvault-pro`
+- **Auto-Updates**: (Coming soon)
+
+### Building the Installer
+
+To build the Windows installer yourself:
+
+```bash
+# Prerequisites: Node.js 18+
+
+# Clone the repository
+git clone https://github.com/yourusername/sqlvault-pro.git
+cd sqlvault-pro/desktop
+
+# Option 1: Use the build script
+node build.js
+
+# Option 2: On Windows, double-click build.bat
+```
+
+The installer will be created in `desktop/dist/`:
+- `SQLVault-Pro-Setup-1.0.0.exe`
+
+### Desktop App Data Locations
+
+| Data | Location |
+|------|----------|
+| Database | `%APPDATA%\sqlvault-pro\data\inventory.db` |
+| Secrets | `%APPDATA%\sqlvault-pro\secrets.json` |
+| Logs | `%APPDATA%\sqlvault-pro\logs\` |
+
+### System Requirements
+
+- Windows 10 or Windows 11
+- 4GB RAM minimum
+- 500MB disk space
+
+---
+
 ## Configuration
 
 ### Backend Environment Variables (.env)
