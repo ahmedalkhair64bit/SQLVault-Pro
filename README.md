@@ -14,6 +14,22 @@
 
 ---
 
+## 📥 Quick Download
+
+| Platform | Download | Instructions |
+|----------|----------|--------------|
+| **Windows** | [📦 SQLVault Pro-Portable-1.0.0.exe](https://github.com/ahmedalkhair64bit/SQLVault-Pro/raw/main/SQLVault%20Pro-Portable-1.0.0.exe) | Download, double-click, run! No installation needed. |
+| **Docker** | `docker pull` | See [Docker instructions](#docker-deployment) below |
+
+### Default Login Credentials
+| Username | Password |
+|----------|----------|
+| `admin` | `Admin@123` |
+
+> ⚠️ **Change the default password immediately after first login!**
+
+---
+
 ## Overview
 
 SQL Inventory Hub replaces traditional Excel-based SQL Server inventory tracking with a live, interactive web dashboard. It provides DBAs with a single pane of glass to view all SQL Server instances, databases, and related metadata across their organization.
