@@ -173,6 +173,128 @@ Access the application at: **http://localhost:3001**
 
 ---
 
+## Docker Deployment
+
+The easiest way to run SQLVault Pro is using Docker.
+
+### Quick Start with Docker
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/sqlvault-pro.git
+cd sqlvault-pro
+
+# Start with Docker Compose
+docker compose up -d
+
+# View logs
+docker compose logs -f
+```
+
+Access the application at: **http://localhost:3001**
+
+### Docker Compose (Recommended)
+
+The `docker-compose.yml` file provides the complete setup:
+
+```bash
+# Build and start
+docker compose up -d --build
+
+# Stop
+docker compose down
+
+# Stop and remove data volume
+docker compose down -v
+```
+
+### Environment Variables
+
+Configure the application by creating a `.env` file or passing environment variables:
+
+```bash
+# Create .env file for Docker Compose
+cat > .env << 'EOF'
+JWT_SECRET=your-super-secret-jwt-key-change-in-production
+ENCRYPTION_KEY=your-32-character-encryption-key
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=YourSecurePassword123!
+MSSQL_ENCRYPT=false
+MSSQL_TRUST_SERVER_CERTIFICATE=true
+EOF
+
+# Start with custom environment
+docker compose up -d
+```
+
+### Building the Docker Image Manually
+
+```bash
+# Build the image
+docker build -t sqlvault-pro:latest .
+
+# Run the container
+docker run -d \
+  --name sqlvault-pro \
+  -p 3001:3001 \
+  -e JWT_SECRET=your-secret-key \
+  -e ENCRYPTION_KEY=change-this-to-32-char-secret!! \
+  -v sqlvault-data:/app/data \
+  sqlvault-pro:latest
+```
+
+### Docker Image Details
+
+- **Base Image**: Node.js 20 Alpine
+- **Exposed Port**: 3001
+- **Data Volume**: `/app/data` (SQLite database)
+- **Health Check**: `GET /api/health`
+- **Non-root User**: Runs as `sqlvault` user for security
+
+### Automatic Database Initialization
+
+The Docker container automatically handles database setup on first run:
+- Runs migrations if no database exists
+- Seeds the default admin user
+- Checks for pending migrations on subsequent starts
+
+No manual initialization is required!
+
+### Connecting to SQL Servers
+
+When running in Docker, ensure your SQL Servers are accessible from the container:
+
+- For SQL Servers on the host machine, use `host.docker.internal` as the hostname
+- For SQL Servers on the same Docker network, use the container name
+- For remote SQL Servers, ensure network connectivity from the container
+
+### Production Deployment
+
+For production deployments:
+
+1. **Use strong secrets**:
+   ```bash
+   # Generate JWT secret
+   openssl rand -base64 32
+
+   # Generate encryption key (32 characters)
+   openssl rand -hex 16
+   ```
+
+2. **Use a reverse proxy** (nginx/traefik) with SSL termination
+
+3. **Backup the data volume** regularly:
+   ```bash
+   docker run --rm -v sqlvault-data:/data -v $(pwd):/backup alpine tar czf /backup/sqlvault-backup.tar.gz /data
+   ```
+
+4. **Monitor container health**:
+   ```bash
+   docker inspect --format='{{.State.Health.Status}}' sqlvault-pro
+   ```
+
+---
+
 ## Configuration
 
 ### Backend Environment Variables (.env)

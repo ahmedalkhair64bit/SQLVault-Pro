@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  sqlvault-pro:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sqlvault-pro:latest
+    container_name: sqlvault-pro
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - JWT_SECRET=${JWT_SECRET:-change-this-to-a-secure-random-string}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-change-this-to-32-char-secret!!}
+      - DB_PATH=/app/data/inventory.db
+      - STATIC_PATH=/app/public
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin@123}
+      - MSSQL_ENCRYPT=${MSSQL_ENCRYPT:-false}
+      - MSSQL_TRUST_SERVER_CERTIFICATE=${MSSQL_TRUST_SERVER_CERTIFICATE:-true}
+    volumes:
+      # Persist SQLite database
+      - sqlvault-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  sqlvault-data:
+    driver: local

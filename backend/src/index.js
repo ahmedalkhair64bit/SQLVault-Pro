@@ -32,9 +32,11 @@ app.get('/api/health', (req, res) => {
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(path.join(__dirname, '../../frontend/build')));
+    // Support both local build path and Docker container path
+    const staticPath = process.env.STATIC_PATH || path.join(__dirname, '../../frontend/build');
+    app.use(express.static(staticPath));
     app.get('*', (req, res) => {
-        res.sendFile(path.join(__dirname, '../../frontend/build/index.html'));
+        res.sendFile(path.join(staticPath, 'index.html'));
     });
 }
 

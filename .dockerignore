@@ -1,0 +1,62 @@
+# Git
+.git
+.gitignore
+
+# Node modules (will be installed in container)
+node_modules
+*/node_modules
+**/node_modules
+
+# Build artifacts
+frontend/build
+dist
+
+# Environment files (use docker-compose environment instead)
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test files
+coverage
+*.test.js
+*.spec.js
+__tests__
+
+# Documentation
+*.md
+!README.md
+
+# Docker files (avoid recursive copying)
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# SQLite database files (will be created in volume)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+backend/data
+
+# Misc
+.npm
+.eslintcache
+.cache
