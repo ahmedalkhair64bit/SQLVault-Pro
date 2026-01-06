@@ -1,11 +1,11 @@
 const { app, BrowserWindow, Menu, shell, dialog } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
 const http = require('http');
+const fs = require('fs');
 
 // Keep a global reference of the window object
 let mainWindow = null;
-let backendProcess = null;
+let server = null;
 const PORT = 3001;
 
 // Determine if we're in development or production
@@ -35,7 +35,6 @@ function getDatabasePath() {
 
 // Ensure data directory exists
 function ensureDataDirectory() {
-    const fs = require('fs');
     const dataDir = path.dirname(getDatabasePath());
     if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
@@ -50,7 +49,6 @@ function generateSecureKey(length) {
 
 // Get or create persistent secrets
 function getSecrets() {
-    const fs = require('fs');
     const secretsPath = path.join(app.getPath('userData'), 'secrets.json');
 
     if (fs.existsSync(secretsPath)) {
@@ -70,91 +68,87 @@ function getSecrets() {
     return secrets;
 }
 
-// Start the backend server
+// Start the backend server inline
 function startBackend() {
     return new Promise((resolve, reject) => {
-        ensureDataDirectory();
-        const secrets = getSecrets();
+        try {
+            ensureDataDirectory();
+            const secrets = getSecrets();
+            const backendPath = getBackendPath();
 
-        const backendPath = getBackendPath();
-        const nodePath = process.execPath;
+            // Set environment variables BEFORE requiring any backend modules
+            process.env.NODE_ENV = 'production';
+            process.env.PORT = PORT.toString();
+            process.env.DB_PATH = getDatabasePath();
+            process.env.STATIC_PATH = getFrontendPath();
+            process.env.JWT_SECRET = secrets.JWT_SECRET;
+            process.env.ENCRYPTION_KEY = secrets.ENCRYPTION_KEY;
+            process.env.ADMIN_USERNAME = 'admin';
+            process.env.ADMIN_PASSWORD = 'Admin@123';
+            process.env.MSSQL_ENCRYPT = 'false';
+            process.env.MSSQL_TRUST_SERVER_CERTIFICATE = 'true';
 
-        // Environment variables for the backend
-        const env = {
-            ...process.env,
-            NODE_ENV: 'production',
-            PORT: PORT.toString(),
-            DB_PATH: getDatabasePath(),
-            STATIC_PATH: getFrontendPath(),
-            JWT_SECRET: secrets.JWT_SECRET,
-            ENCRYPTION_KEY: secrets.ENCRYPTION_KEY,
-            ADMIN_USERNAME: 'admin',
-            ADMIN_PASSWORD: 'Admin@123',
-            MSSQL_ENCRYPT: 'false',
-            MSSQL_TRUST_SERVER_CERTIFICATE: 'true'
-        };
+            console.log('Backend path:', backendPath);
+            console.log('Database path:', getDatabasePath());
+            console.log('Frontend path:', getFrontendPath());
 
-        // For packaged app, use the bundled node
-        const scriptPath = path.join(backendPath, 'src', 'index.js');
+            // Check if database needs initialization
+            const dbExists = fs.existsSync(getDatabasePath());
 
-        console.log('Starting backend from:', scriptPath);
-        console.log('Database path:', getDatabasePath());
-        console.log('Frontend path:', getFrontendPath());
+            if (!dbExists) {
+                console.log('Database not found, running migrations...');
+                try {
+                    // Change to backend directory for proper module resolution
+                    const originalCwd = process.cwd();
+                    process.chdir(backendPath);
 
-        // Run migrations first
-        const migrationsPath = path.join(backendPath, 'src', 'migrations', 'run.js');
-        const seedPath = path.join(backendPath, 'src', 'migrations', 'seed.js');
+                    // Run migrations
+                    const migrationsPath = path.join(backendPath, 'src', 'migrations', 'run.js');
+                    require(migrationsPath);
+                    console.log('Migrations complete');
 
-        // Check if database needs initialization
-        const fs = require('fs');
-        const dbExists = fs.existsSync(getDatabasePath());
+                    // Run seed
+                    const seedPath = path.join(backendPath, 'src', 'migrations', 'seed.js');
+                    // Clear require cache to ensure fresh run
+                    delete require.cache[require.resolve(seedPath)];
+                    require(seedPath);
+                    console.log('Seeding complete');
 
-        if (!dbExists) {
-            console.log('Database not found, running migrations...');
-            try {
-                // Run migrations synchronously before starting server
-                require(migrationsPath);
-                console.log('Migrations complete');
-
-                require(seedPath);
-                console.log('Seeding complete');
-            } catch (err) {
-                console.error('Migration error:', err);
+                    process.chdir(originalCwd);
+                } catch (err) {
+                    console.error('Migration error:', err);
+                    // Continue anyway, the server might still work
+                }
             }
+
+            // Start Express server by requiring the backend
+            console.log('Starting Express server...');
+
+            // Change working directory to backend for proper module resolution
+            process.chdir(backendPath);
+
+            // Load dotenv config won't override our env vars since they're already set
+            const indexPath = path.join(backendPath, 'src', 'index.js');
+
+            // Clear any cached modules
+            Object.keys(require.cache).forEach(key => {
+                if (key.includes('backend')) {
+                    delete require.cache[key];
+                }
+            });
+
+            // Require the express app - this starts the server
+            require(indexPath);
+
+            console.log('Backend server started on port', PORT);
+
+            // Give Express a moment to fully initialize
+            setTimeout(() => resolve(), 1000);
+
+        } catch (error) {
+            console.error('Failed to start backend:', error);
+            reject(error);
         }
-
-        // Start the backend server
-        backendProcess = spawn(nodePath, [scriptPath], {
-            cwd: backendPath,
-            env: env,
-            stdio: ['pipe', 'pipe', 'pipe']
-        });
-
-        backendProcess.stdout.on('data', (data) => {
-            console.log(`Backend: ${data}`);
-            if (data.toString().includes('running on port')) {
-                resolve();
-            }
-        });
-
-        backendProcess.stderr.on('data', (data) => {
-            console.error(`Backend Error: ${data}`);
-        });
-
-        backendProcess.on('error', (err) => {
-            console.error('Failed to start backend:', err);
-            reject(err);
-        });
-
-        backendProcess.on('close', (code) => {
-            console.log(`Backend process exited with code ${code}`);
-            if (code !== 0 && mainWindow) {
-                dialog.showErrorBox('Backend Error', 'The backend server stopped unexpectedly.');
-            }
-        });
-
-        // Give it a moment to start, then resolve anyway
-        setTimeout(() => resolve(), 3000);
     });
 }
 
@@ -266,18 +260,27 @@ function createWindow() {
                     click: () => {
                         shell.openPath(app.getPath('userData'));
                     }
+                },
+                {
+                    label: 'View Logs',
+                    click: () => {
+                        dialog.showMessageBox(mainWindow, {
+                            type: 'info',
+                            title: 'Debug Info',
+                            message: 'Paths',
+                            detail: `Backend: ${getBackendPath()}\nDatabase: ${getDatabasePath()}\nFrontend: ${getFrontendPath()}`
+                        });
+                    }
                 }
             ]
         }
     ];
 
-    // Add DevTools in development
-    if (isDev) {
-        menuTemplate[2].submenu.push(
-            { type: 'separator' },
-            { role: 'toggleDevTools' }
-        );
-    }
+    // Add DevTools option
+    menuTemplate[2].submenu.push(
+        { type: 'separator' },
+        { role: 'toggleDevTools' }
+    );
 
     const menu = Menu.buildFromTemplate(menuTemplate);
     Menu.setApplicationMenu(menu);
@@ -342,7 +345,7 @@ app.whenReady().then(async () => {
         });
     } catch (error) {
         splash.destroy();
-        dialog.showErrorBox('Startup Error', `Failed to start SQLVault Pro:\n${error.message}`);
+        dialog.showErrorBox('Startup Error', `Failed to start SQLVault Pro:\n${error.message}\n\nBackend path: ${getBackendPath()}\nDatabase path: ${getDatabasePath()}`);
         app.quit();
     }
 });
@@ -357,13 +360,6 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
         createWindow();
-    }
-});
-
-// Cleanup on quit
-app.on('before-quit', () => {
-    if (backendProcess) {
-        backendProcess.kill();
     }
 });
 
