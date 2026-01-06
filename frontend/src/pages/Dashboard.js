@@ -299,13 +299,21 @@ function Dashboard() {
                             onClick={() => navigate(`/instance/${instance.id}`)}
                           >
                             <td>
-                              <span className={`status-badge status-${instance.last_status?.toLowerCase()}`}>
+                              <span className={`status-badge status-${instance.last_status?.toLowerCase()}`} title={instance.last_error || ''}>
                                 <span className={`status-dot ${instance.last_status?.toLowerCase()}`}></span>
                                 {instance.last_status || 'Unknown'}
+                                {instance.last_status === 'DOWN' && instance.last_error && (
+                                  <span style={{ marginLeft: '5px', cursor: 'help' }} title={instance.last_error}>⚠</span>
+                                )}
                               </span>
                             </td>
                             <td>
                               <strong>{instance.name}</strong>
+                              {instance.last_status === 'DOWN' && instance.last_error && (
+                                <div style={{ fontSize: '0.75rem', color: 'var(--danger)', marginTop: '3px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={instance.last_error}>
+                                  {instance.last_error}
+                                </div>
+                              )}
                             </td>
                             <td>
                               <span className={`env-badge env-${getEnvClass(instance.environment)}`}>

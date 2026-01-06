@@ -173,6 +173,13 @@ function InstanceDetail() {
         </div>
       </div>
 
+      {/* Connection Error Alert */}
+      {instance.last_status === 'DOWN' && instance.last_error && (
+        <div className="alert alert-error" style={{ marginBottom: '20px' }}>
+          <strong>Connection Error:</strong> {instance.last_error}
+        </div>
+      )}
+
       {/* Instance Info */}
       <div className="card" style={{ marginBottom: '30px' }}>
         <div className="info-grid">

@@ -31,7 +31,7 @@ router.get('/', authenticateToken, [
             i.id, i.name, i.environment, i.is_always_on, i.ag_name,
             i.host, i.port, i.description, i.is_active, i.last_status,
             i.last_restart_time, i.version, i.edition, i.cpu_cores, i.total_memory_gb,
-            i.last_checked_at, i.created_at, i.updated_at,
+            i.last_checked_at, i.last_error, i.created_at, i.updated_at,
             COUNT(DISTINCT d.id) AS database_count
         FROM sql_instances i
         LEFT JOIN sql_databases d ON i.id = d.instance_id
@@ -110,7 +110,7 @@ router.get('/:id', authenticateToken, [
             SELECT id, name, environment, is_always_on, ag_name,
                    host, port, auth_username, description, is_active, last_status,
                    last_restart_time, version, edition, cpu_cores, total_memory_gb,
-                   last_checked_at, created_at, updated_at
+                   last_checked_at, last_error, created_at, updated_at
             FROM sql_instances WHERE id = ? AND is_active = 1
         `).get(id);
 
@@ -197,8 +197,9 @@ router.post('/', authenticateToken, requireAdmin, [
             }
         } catch (collectErr) {
             console.error('Initial collection error:', collectErr);
-            // Update status to DOWN if collection fails
-            db.prepare('UPDATE sql_instances SET last_status = ? WHERE id = ?').run('DOWN', instanceId);
+            // Update status to DOWN and save error message if collection fails
+            db.prepare('UPDATE sql_instances SET last_status = ?, last_error = ? WHERE id = ?')
+                .run('DOWN', collectErr.message, instanceId);
         }
 
         // Return the updated instance (without sensitive data)
@@ -206,7 +207,7 @@ router.post('/', authenticateToken, requireAdmin, [
             SELECT id, name, environment, is_always_on, ag_name,
                    host, port, auth_username, description, is_active, last_status,
                    last_restart_time, version, edition, cpu_cores, total_memory_gb,
-                   last_checked_at, created_at, updated_at
+                   last_checked_at, last_error, created_at, updated_at
             FROM sql_instances WHERE id = ?
         `).get(instanceId);
         res.status(201).json(updatedInstance);
@@ -285,7 +286,7 @@ router.put('/:id', authenticateToken, requireAdmin, [
             SELECT id, name, environment, is_always_on, ag_name,
                    host, port, auth_username, description, is_active, last_status,
                    last_restart_time, version, edition, cpu_cores, total_memory_gb,
-                   last_checked_at, created_at, updated_at
+                   last_checked_at, last_error, created_at, updated_at
             FROM sql_instances WHERE id = ?
         `).get(id);
 
@@ -328,7 +329,7 @@ router.patch('/:id/description', authenticateToken, [
             SELECT id, name, environment, is_always_on, ag_name,
                    host, port, auth_username, description, is_active, last_status,
                    last_restart_time, version, edition, cpu_cores, total_memory_gb,
-                   last_checked_at, created_at, updated_at
+                   last_checked_at, last_error, created_at, updated_at
             FROM sql_instances WHERE id = ?
         `).get(id);
         res.json(updatedInstance);
@@ -458,7 +459,7 @@ router.post('/:id/refresh', authenticateToken, [
             SELECT id, name, environment, is_always_on, ag_name,
                    host, port, auth_username, description, is_active, last_status,
                    last_restart_time, version, edition, cpu_cores, total_memory_gb,
-                   last_checked_at, created_at, updated_at
+                   last_checked_at, last_error, created_at, updated_at
             FROM sql_instances WHERE id = ?
         `).get(id);
 
@@ -594,7 +595,7 @@ router.get('/ag/:agName', authenticateToken, (req, res) => {
                 i.id, i.name, i.environment, i.is_always_on, i.ag_name,
                 i.host, i.port, i.description, i.is_active, i.last_status,
                 i.last_restart_time, i.version, i.edition, i.cpu_cores, i.total_memory_gb,
-                i.last_checked_at, i.created_at, i.updated_at,
+                i.last_checked_at, i.last_error, i.created_at, i.updated_at,
                 COUNT(DISTINCT d.id) AS database_count
             FROM sql_instances i
             LEFT JOIN sql_databases d ON i.id = d.instance_id

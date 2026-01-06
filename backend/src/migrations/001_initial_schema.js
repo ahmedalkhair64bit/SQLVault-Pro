@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS sql_instances (
     cpu_cores INTEGER,
     total_memory_gb REAL,
     last_checked_at DATETIME,
+    last_error TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

@@ -250,7 +250,7 @@ function createWindow() {
                             type: 'info',
                             title: 'About SQLVault Pro',
                             message: 'SQLVault Pro',
-                            detail: 'Version 1.0.0\n\nSQL Server Inventory Management System\n\nA modern tool for DBAs to manage and monitor SQL Server infrastructure.'
+                            detail: 'Version 1.0.2\n\nSQL Server Inventory Management System\n\nA modern tool for DBAs to manage and monitor SQL Server infrastructure.'
                         });
                     }
                 },

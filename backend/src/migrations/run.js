@@ -18,6 +18,7 @@ console.log('Running migrations...');
 
 // Import and run schema
 const { schema } = require('./001_initial_schema');
+const { addLastErrorColumn } = require('./002_add_last_error');
 
 // Split by semicolons and run each statement
 const statements = schema.split(';').filter(s => s.trim());
@@ -28,6 +29,21 @@ for (const statement of statements) {
         } catch (err) {
             console.error(`Error executing statement: ${statement.substring(0, 50)}...`);
             console.error(err.message);
+        }
+    }
+}
+
+// Run migration 002 - add last_error column (for existing databases)
+const migration002Statements = addLastErrorColumn.split(';').filter(s => s.trim());
+for (const statement of migration002Statements) {
+    if (statement.trim()) {
+        try {
+            db.exec(statement);
+        } catch (err) {
+            // Column may already exist, ignore duplicate column error
+            if (!err.message.includes('duplicate column')) {
+                console.error(`Migration 002 error: ${err.message}`);
+            }
         }
     }
 }

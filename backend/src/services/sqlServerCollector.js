@@ -308,7 +308,7 @@ async function saveInstanceMetadata(instanceId, metadata) {
     const db = getDb();
     const now = new Date().toISOString();
 
-    // Update instance info
+    // Update instance info including error message
     db.prepare(`
         UPDATE sql_instances SET
             last_status = ?,
@@ -318,6 +318,7 @@ async function saveInstanceMetadata(instanceId, metadata) {
             cpu_cores = ?,
             total_memory_gb = ?,
             last_checked_at = ?,
+            last_error = ?,
             updated_at = ?
         WHERE id = ?
     `).run(
@@ -328,6 +329,7 @@ async function saveInstanceMetadata(instanceId, metadata) {
         metadata.cpuCores,
         metadata.totalMemoryGb,
         now,
+        metadata.status === 'DOWN' ? metadata.error : null,
         now,
         instanceId
     );
