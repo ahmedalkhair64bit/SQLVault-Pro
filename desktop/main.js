@@ -2,21 +2,21 @@ const { app, BrowserWindow, Menu, shell, dialog } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+const Module = require('module');
 
 // Keep a global reference of the window object
 let mainWindow = null;
-let server = null;
 const PORT = 3001;
 
 // Determine if we're in development or production
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
-// Get the path to backend resources
-function getBackendPath() {
+// Get the path to backend source files
+function getBackendSrcPath() {
     if (isDev) {
-        return path.join(__dirname, '..', 'backend');
+        return path.join(__dirname, '..', 'backend', 'src');
     }
-    return path.join(process.resourcesPath, 'backend');
+    return path.join(process.resourcesPath, 'backend', 'src');
 }
 
 // Get the path to the frontend build
@@ -61,22 +61,43 @@ function getSecrets() {
 
     const secrets = {
         JWT_SECRET: generateSecureKey(32),
-        ENCRYPTION_KEY: generateSecureKey(16) // 32 hex chars = 16 bytes
+        ENCRYPTION_KEY: generateSecureKey(16)
     };
 
     fs.writeFileSync(secretsPath, JSON.stringify(secrets, null, 2));
     return secrets;
 }
 
-// Start the backend server inline
+// Setup module resolution to use electron app's node_modules
+function setupModuleResolution() {
+    const electronNodeModules = path.join(__dirname, 'node_modules');
+    const appNodeModules = isDev
+        ? path.join(__dirname, 'node_modules')
+        : path.join(path.dirname(app.getPath('exe')), 'resources', 'app.asar', 'node_modules');
+
+    // Add our node_modules to the front of the module search path
+    const originalResolveLookupPaths = Module._resolveLookupPaths;
+    Module._resolveLookupPaths = function(request, parent) {
+        const result = originalResolveLookupPaths.call(this, request, parent);
+        if (result && result.length > 0) {
+            // Add electron app's node_modules at the start
+            if (!result.includes(electronNodeModules)) {
+                result.unshift(electronNodeModules);
+            }
+        }
+        return result;
+    };
+}
+
+// Start the backend server
 function startBackend() {
     return new Promise((resolve, reject) => {
         try {
             ensureDataDirectory();
             const secrets = getSecrets();
-            const backendPath = getBackendPath();
+            const backendSrcPath = getBackendSrcPath();
 
-            // Set environment variables BEFORE requiring any backend modules
+            // Set environment variables
             process.env.NODE_ENV = 'production';
             process.env.PORT = PORT.toString();
             process.env.DB_PATH = getDatabasePath();
@@ -88,9 +109,12 @@ function startBackend() {
             process.env.MSSQL_ENCRYPT = 'false';
             process.env.MSSQL_TRUST_SERVER_CERTIFICATE = 'true';
 
-            console.log('Backend path:', backendPath);
+            console.log('Backend src path:', backendSrcPath);
             console.log('Database path:', getDatabasePath());
             console.log('Frontend path:', getFrontendPath());
+
+            // Setup module resolution BEFORE requiring backend modules
+            setupModuleResolution();
 
             // Check if database needs initialization
             const dbExists = fs.existsSync(getDatabasePath());
@@ -98,52 +122,35 @@ function startBackend() {
             if (!dbExists) {
                 console.log('Database not found, running migrations...');
                 try {
-                    // Change to backend directory for proper module resolution
-                    const originalCwd = process.cwd();
-                    process.chdir(backendPath);
-
-                    // Run migrations
-                    const migrationsPath = path.join(backendPath, 'src', 'migrations', 'run.js');
+                    const migrationsPath = path.join(backendSrcPath, 'migrations', 'run.js');
                     require(migrationsPath);
                     console.log('Migrations complete');
 
-                    // Run seed
-                    const seedPath = path.join(backendPath, 'src', 'migrations', 'seed.js');
-                    // Clear require cache to ensure fresh run
+                    // Clear cache and run seed
+                    const seedPath = path.join(backendSrcPath, 'migrations', 'seed.js');
                     delete require.cache[require.resolve(seedPath)];
                     require(seedPath);
                     console.log('Seeding complete');
-
-                    process.chdir(originalCwd);
                 } catch (err) {
                     console.error('Migration error:', err);
-                    // Continue anyway, the server might still work
                 }
             }
 
-            // Start Express server by requiring the backend
+            // Start Express server
             console.log('Starting Express server...');
+            const indexPath = path.join(backendSrcPath, 'index.js');
 
-            // Change working directory to backend for proper module resolution
-            process.chdir(backendPath);
-
-            // Load dotenv config won't override our env vars since they're already set
-            const indexPath = path.join(backendPath, 'src', 'index.js');
-
-            // Clear any cached modules
+            // Clear any cached backend modules
             Object.keys(require.cache).forEach(key => {
                 if (key.includes('backend')) {
                     delete require.cache[key];
                 }
             });
 
-            // Require the express app - this starts the server
             require(indexPath);
-
             console.log('Backend server started on port', PORT);
 
-            // Give Express a moment to fully initialize
-            setTimeout(() => resolve(), 1000);
+            setTimeout(() => resolve(), 1500);
 
         } catch (error) {
             console.error('Failed to start backend:', error);
@@ -159,7 +166,6 @@ function waitForBackend(maxAttempts = 30) {
 
         const checkServer = () => {
             attempts++;
-
             const req = http.get(`http://localhost:${PORT}/api/health`, (res) => {
                 if (res.statusCode === 200) {
                     resolve();
@@ -168,10 +174,7 @@ function waitForBackend(maxAttempts = 30) {
                 }
             });
 
-            req.on('error', () => {
-                retry();
-            });
-
+            req.on('error', retry);
             req.setTimeout(1000, () => {
                 req.destroy();
                 retry();
@@ -207,13 +210,10 @@ function createWindow() {
         backgroundColor: '#1a1a2e'
     });
 
-    // Create application menu
     const menuTemplate = [
         {
             label: 'File',
-            submenu: [
-                { role: 'quit' }
-            ]
+            submenu: [{ role: 'quit' }]
         },
         {
             label: 'Edit',
@@ -237,7 +237,9 @@ function createWindow() {
                 { role: 'zoomIn' },
                 { role: 'zoomOut' },
                 { type: 'separator' },
-                { role: 'togglefullscreen' }
+                { role: 'togglefullscreen' },
+                { type: 'separator' },
+                { role: 'toggleDevTools' }
             ]
         },
         {
@@ -250,61 +252,32 @@ function createWindow() {
                             type: 'info',
                             title: 'About SQLVault Pro',
                             message: 'SQLVault Pro',
-                            detail: 'Version 1.0.0\n\nSQL Server Inventory Management System\n\nA modern tool for DBAs to manage and monitor SQL Server infrastructure.'
+                            detail: 'Version 1.0.1\n\nSQL Server Inventory Management System'
                         });
                     }
                 },
                 { type: 'separator' },
                 {
                     label: 'Open Data Folder',
-                    click: () => {
-                        shell.openPath(app.getPath('userData'));
-                    }
-                },
-                {
-                    label: 'View Logs',
-                    click: () => {
-                        dialog.showMessageBox(mainWindow, {
-                            type: 'info',
-                            title: 'Debug Info',
-                            message: 'Paths',
-                            detail: `Backend: ${getBackendPath()}\nDatabase: ${getDatabasePath()}\nFrontend: ${getFrontendPath()}`
-                        });
-                    }
+                    click: () => shell.openPath(app.getPath('userData'))
                 }
             ]
         }
     ];
 
-    // Add DevTools option
-    menuTemplate[2].submenu.push(
-        { type: 'separator' },
-        { role: 'toggleDevTools' }
-    );
-
-    const menu = Menu.buildFromTemplate(menuTemplate);
-    Menu.setApplicationMenu(menu);
-
-    // Load the app
+    Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
     mainWindow.loadURL(`http://localhost:${PORT}`);
+    mainWindow.once('ready-to-show', () => mainWindow.show());
 
-    // Show window when ready
-    mainWindow.once('ready-to-show', () => {
-        mainWindow.show();
-    });
-
-    // Handle external links
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         shell.openExternal(url);
         return { action: 'deny' };
     });
 
-    mainWindow.on('closed', () => {
-        mainWindow = null;
-    });
+    mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-// Create splash/loading window
+// Create splash window
 function createSplashWindow() {
     const splash = new BrowserWindow({
         width: 400,
@@ -319,51 +292,39 @@ function createSplashWindow() {
             contextIsolation: false
         }
     });
-
     splash.loadFile(path.join(__dirname, 'splash.html'));
     return splash;
 }
 
 // App ready handler
 app.whenReady().then(async () => {
-    // Show splash screen
     const splash = createSplashWindow();
 
     try {
-        // Start backend
         await startBackend();
-
-        // Wait for it to be ready
         await waitForBackend();
-
-        // Create main window
         createWindow();
-
-        // Close splash after main window is ready
-        mainWindow.once('ready-to-show', () => {
-            splash.destroy();
-        });
+        mainWindow.once('ready-to-show', () => splash.destroy());
     } catch (error) {
         splash.destroy();
-        dialog.showErrorBox('Startup Error', `Failed to start SQLVault Pro:\n${error.message}\n\nBackend path: ${getBackendPath()}\nDatabase path: ${getDatabasePath()}`);
+        dialog.showErrorBox('Startup Error',
+            `Failed to start SQLVault Pro:\n${error.message}\n\n` +
+            `Backend: ${getBackendSrcPath()}\n` +
+            `Database: ${getDatabasePath()}\n` +
+            `Frontend: ${getFrontendPath()}`
+        );
         app.quit();
     }
 });
 
-// Quit when all windows are closed
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-        app.quit();
-    }
+    if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
-// Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
     console.error('Uncaught Exception:', error);
     dialog.showErrorBox('Error', error.message);

@@ -18,8 +18,13 @@
 
 | Platform | Download | Instructions |
 |----------|----------|--------------|
-| **Windows** | [📦 SQLVault Pro-Portable-1.0.0.exe](https://github.com/ahmedalkhair64bit/SQLVault-Pro/raw/main/SQLVault%20Pro-Portable-1.0.0.exe) | Download, double-click, run! No installation needed. |
-| **Docker** | `docker pull` | See [Docker instructions](#docker-deployment) below |
+| **Windows** | [📦 SQLVault Pro-Portable-1.0.1.exe](https://github.com/ahmedalkhair64bit/SQLVault-Pro/raw/releases/SQLVault%20Pro-Portable-1.0.1.exe) | Download, double-click, run! No installation needed. |
+| **Docker** | `docker compose up -d` | See [Docker instructions](#docker-deployment) below |
+
+### Release Notes - v1.0.1
+- Fixed Windows startup error "Backend failed to start"
+- Fixed native module compatibility for Windows
+- Improved module resolution for packaged app
 
 ### Default Login Credentials
 | Username | Password |
