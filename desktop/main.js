@@ -95,30 +95,33 @@ function startBackend() {
             // Check if database needs initialization
             const dbExists = fs.existsSync(getDatabasePath());
 
-            if (!dbExists) {
-                console.log('Database not found, running migrations...');
-                try {
-                    // Change to backend directory for proper module resolution
-                    const originalCwd = process.cwd();
-                    process.chdir(backendPath);
+            // Always run migrations to ensure schema is up to date
+            console.log('Running migrations...');
+            try {
+                // Change to backend directory for proper module resolution
+                const originalCwd = process.cwd();
+                process.chdir(backendPath);
 
-                    // Run migrations
-                    const migrationsPath = path.join(backendPath, 'src', 'migrations', 'run.js');
-                    require(migrationsPath);
-                    console.log('Migrations complete');
+                // Run migrations
+                const migrationsPath = path.join(backendPath, 'src', 'migrations', 'run.js');
+                // Clear cache to ensure fresh run
+                delete require.cache[require.resolve(migrationsPath)];
+                require(migrationsPath);
+                console.log('Migrations complete');
 
-                    // Run seed
+                // Run seed only if database is new
+                if (!dbExists) {
                     const seedPath = path.join(backendPath, 'src', 'migrations', 'seed.js');
                     // Clear require cache to ensure fresh run
                     delete require.cache[require.resolve(seedPath)];
                     require(seedPath);
                     console.log('Seeding complete');
-
-                    process.chdir(originalCwd);
-                } catch (err) {
-                    console.error('Migration error:', err);
-                    // Continue anyway, the server might still work
                 }
+
+                process.chdir(originalCwd);
+            } catch (err) {
+                console.error('Migration error:', err);
+                // Continue anyway, the server might still work
             }
 
             // Start Express server by requiring the backend
@@ -250,7 +253,7 @@ function createWindow() {
                             type: 'info',
                             title: 'About SQLVault Pro',
                             message: 'SQLVault Pro',
-                            detail: 'Version 1.0.2\n\nSQL Server Inventory Management System\n\nA modern tool for DBAs to manage and monitor SQL Server infrastructure.'
+                            detail: 'Version 1.0.3\n\nSQL Server Inventory Management System\n\nA modern tool for DBAs to manage and monitor SQL Server infrastructure.'
                         });
                     }
                 },

@@ -18,7 +18,7 @@
 
 | Platform | Download | Instructions |
 |----------|----------|--------------|
-| **Windows** | [📦 SQLVault Pro-Portable-1.0.2.exe](https://github.com/ahmedalkhair64bit/SQLVault-Pro/raw/claude/releases-GydND/desktop/dist/SQLVault%20Pro-Portable-1.0.2.exe) | Download, double-click, run! No installation needed. |
+| **Windows** | [📦 SQLVault Pro-Portable-1.0.3.exe](https://github.com/ahmedalkhair64bit/SQLVault-Pro/raw/claude/releases-GydND/desktop/dist/SQLVault%20Pro-Portable-1.0.3.exe) | Download, double-click, run! No installation needed. |
 | **Docker** | `docker pull` | See [Docker instructions](#docker-deployment) below |
 
 ### Default Login Credentials
