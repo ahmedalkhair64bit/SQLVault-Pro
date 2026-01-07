@@ -2,6 +2,7 @@ const { app, BrowserWindow, Menu, shell, dialog } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+const Module = require('module');
 
 // Keep a global reference of the window object
 let mainWindow = null;
@@ -92,17 +93,18 @@ function startBackend() {
             console.log('Database path:', getDatabasePath());
             console.log('Frontend path:', getFrontendPath());
 
+            // Add backend node_modules to module search path
+            const backendNodeModules = path.join(backendPath, 'node_modules');
+            process.env.NODE_PATH = backendNodeModules;
+            Module._initPaths();
+
             // Check if database needs initialization
             const dbExists = fs.existsSync(getDatabasePath());
 
             // Always run migrations to ensure schema is up to date
             console.log('Running migrations...');
             try {
-                // Change to backend directory for proper module resolution
-                const originalCwd = process.cwd();
-                process.chdir(backendPath);
-
-                // Run migrations
+                // Run migrations using absolute path
                 const migrationsPath = path.join(backendPath, 'src', 'migrations', 'run.js');
                 // Clear cache to ensure fresh run
                 delete require.cache[require.resolve(migrationsPath)];
@@ -117,8 +119,6 @@ function startBackend() {
                     require(seedPath);
                     console.log('Seeding complete');
                 }
-
-                process.chdir(originalCwd);
             } catch (err) {
                 console.error('Migration error:', err);
                 // Continue anyway, the server might still work
@@ -127,10 +127,7 @@ function startBackend() {
             // Start Express server by requiring the backend
             console.log('Starting Express server...');
 
-            // Change working directory to backend for proper module resolution
-            process.chdir(backendPath);
-
-            // Load dotenv config won't override our env vars since they're already set
+                        // Load dotenv config won't override our env vars since they're already set
             const indexPath = path.join(backendPath, 'src', 'index.js');
 
             // Clear any cached modules

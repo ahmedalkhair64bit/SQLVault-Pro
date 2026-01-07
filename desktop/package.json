@@ -15,20 +15,23 @@
     "build:electron": "electron-builder --win",
     "build:all": "npm run build:frontend && npm run build:backend && npm run build:electron",
     "dist": "electron-builder --win --publish never",
-    "dist:dir": "electron-builder --win --dir"
+    "dist:dir": "electron-builder --win --dir",
+    "postinstall": "electron-rebuild -f -w better-sqlite3 -m ../backend",
+    "rebuild": "electron-rebuild -f -w better-sqlite3 -m ../backend"
   },
-  "dependencies": {
-    "better-sqlite3": "^9.4.3"
-  },
+  "dependencies": {},
   "devDependencies": {
     "electron": "^28.1.0",
     "electron-builder": "^24.9.1",
+    "@electron/rebuild": "^3.6.0",
     "icon-gen": "^5.0.0"
   },
   "build": {
     "appId": "com.sqlvault.pro",
     "productName": "SQLVault Pro",
     "copyright": "Copyright © 2024 SQLVault Pro",
+    "npmRebuild": false,
+    "asar": false,
     "directories": {
       "output": "dist",
       "buildResources": "assets"

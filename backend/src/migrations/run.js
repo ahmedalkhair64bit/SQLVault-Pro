@@ -1,15 +1,18 @@
 const Database = require('better-sqlite3');
 const path = require('path');
-const fs = require('fs');
+const fsModule = require('fs');
 require('dotenv').config();
 
-const dbPath = process.env.DB_PATH || './data/inventory.db';
+const dbPath = process.env.DB_PATH;
+if (!dbPath) {
+    throw new Error('DB_PATH environment variable must be set');
+}
 const dbDir = path.dirname(dbPath);
 
 // Ensure data directory exists
-if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-    console.log(`Created directory: ${dbDir}`);
+if (!fsModule.existsSync(dbDir)) {
+    fsModule.mkdirSync(dbDir, { recursive: true });
+    console.log("Created directory:", dbDir);
 }
 
 const db = new Database(dbPath);
@@ -27,7 +30,7 @@ for (const statement of statements) {
         try {
             db.exec(statement);
         } catch (err) {
-            console.error(`Error executing statement: ${statement.substring(0, 50)}...`);
+            console.error("Error in migration");
             console.error(err.message);
         }
     }
@@ -42,7 +45,7 @@ for (const statement of migration002Statements) {
         } catch (err) {
             // Column may already exist, ignore duplicate column error
             if (!err.message.includes('duplicate column')) {
-                console.error(`Migration 002 error: ${err.message}`);
+                console.error("Error in migration");
             }
         }
     }

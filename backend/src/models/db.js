@@ -2,7 +2,10 @@ const Database = require('better-sqlite3');
 const path = require('path');
 require('dotenv').config();
 
-const dbPath = process.env.DB_PATH || './data/inventory.db';
+const dbPath = process.env.DB_PATH;
+if (!dbPath) {
+    throw new Error('DB_PATH environment variable must be set');
+}
 
 let db = null;
 
